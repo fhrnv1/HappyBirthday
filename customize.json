@@ -1,9 +1,9 @@
 {
   "greeting": "你好啊",
-  "name": "XX",
+  "name": "苏菲伊娜",
   "greetingText": "很庆幸能在最美丽的年华遇见最美丽的你",
   "wishText": "朱颜长似，头上花枝，岁岁年年。愿君青丝不老，岁岁皆欢。",
-  "imagePath": "img/lydia2.png",
+  "imagePath": "img/sfyn.jpg",
   "text1": "今天是你的生日啊!!! :D",
   "textInChatBox": "非常非常非常诚挚的祝你生日快乐！！！很多很多的快乐……",
   "sendButtonLabel": "发送",
@@ -24,8 +24,9 @@
   "fonts": [
     {
       "name": "Ma Shan Zheng",
-      "path": "https://fonts.googleapis.com/css?family=Ma+Shan+Zheng&display=swap"
+      "path": ""
     }
-  ]
+  ],
+  "unlockTime": ""
 }
 

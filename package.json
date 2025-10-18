@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "rspack serve",
     "build": "rspack build",
-    "serve": "rspack serve"
+    "serve": "rspack serve",
+    "fonts:download": "node ./script/tools/download-ma-shan-zheng.mjs"
   },
   "devDependencies": {
     "@rspack/cli": "^0.5.0",

@@ -1,13 +1,121 @@
 let audioUrl = ""
 let audio = null
 let isPlaying = false
+// 收集自定义字体名称，等待加载后再应用，减少刷新时字体跳变
+let customFontNames = ['Ma Shan Zheng']
 
 // Import the data to customize and insert them into page
 const fetchData = () => {
   fetch("customize.json")
     .then(data => data.json())
     .then(data => {
-      dataArr = Object.keys(data)
+      // ===== 时间门控：到达指定时间才可开始 =====
+      const startBtn = document.querySelector('#startButton')
+      const countdownScreen = document.getElementById('countdownScreen')
+      const countdownEl = document.getElementById('countdown')
+      let isUnlocked = true
+      let countdownTimer = null
+
+      function parseLocalDateTime(str) {
+        if (!str) return null
+        const s = String(str).trim()
+        // 支持 "YYYY-MM-DD HH:mm[:ss]" / "YYYY/MM/DD HH:mm[:ss]" / ISO "YYYY-MM-DDTHH:mm[:ss]"
+        const iso = s.includes('T') ? s : s.replace(' ', 'T').replace(/\//g, '-')
+        const d = new Date(iso)
+        if (!isNaN(d.getTime())) return d
+        // 手动解析
+        const m = s.match(/^(\d{4})[-\/]?(\d{1,2})[-\/]?(\d{1,2})(?:[ T](\d{1,2})(?::(\d{1,2})(?::(\d{1,2}))?)?)?$/)
+        if (m) {
+          const [_, Y, M, D, h = '0', m2 = '0', s2 = '0'] = m
+          const dt = new Date(
+            Number(Y),
+            Number(M) - 1,
+            Number(D),
+            Number(h),
+            Number(m2),
+            Number(s2)
+          )
+          return isNaN(dt.getTime()) ? null : dt
+        }
+        return null
+      }
+
+      function formatDiff(ms) {
+        if (ms < 0) ms = 0
+        const totalSec = Math.floor(ms / 1000)
+        const days = Math.floor(totalSec / 86400)
+        const hours = Math.floor((totalSec % 86400) / 3600)
+        const minutes = Math.floor((totalSec % 3600) / 60)
+        const seconds = totalSec % 60
+        const pad = (n) => n.toString().padStart(2, '0')
+        return days > 0
+          ? `${days} 天 ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+          : `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+      }
+
+      function setLockedUI(locked) {
+        if (startBtn) {
+          if (locked) {
+            startBtn.setAttribute('aria-disabled', 'true')
+            startBtn.classList.add('disabled')
+          } else {
+            startBtn.removeAttribute('aria-disabled')
+            startBtn.classList.remove('disabled')
+          }
+        }
+        // 开始界面显示/隐藏
+        const startSign = document.querySelector('.startSign')
+        if (startSign) {
+          if (locked) {
+            startSign.hidden = true
+          } else {
+            startSign.hidden = false
+          }
+        }
+        if (countdownScreen) {
+          if (locked) {
+            countdownScreen.style.display = 'block' // 强制覆盖 CSS 中的 display:none
+            countdownScreen.setAttribute('aria-hidden', 'false')
+          } else {
+            countdownScreen.style.display = 'none'
+            countdownScreen.setAttribute('aria-hidden', 'true')
+          }
+        }
+      }
+
+      const unlockTimeStr = (data.unlockTime || '').trim()
+      const unlockAt = parseLocalDateTime(unlockTimeStr)
+      if (unlockAt && unlockAt.getTime() > Date.now()) {
+        isUnlocked = false
+        setLockedUI(true)
+        const tick = () => {
+          const now = Date.now()
+          const diff = unlockAt.getTime() - now
+          if (diff <= 0) {
+            clearInterval(countdownTimer)
+            countdownTimer = null
+            isUnlocked = true
+            setLockedUI(false)
+            // 同步页面状态类
+            document.documentElement.classList.remove('locked')
+            document.documentElement.classList.add('unlocked')
+            // 无障碍：自动聚焦到开始按钮
+            if (startBtn) setTimeout(() => startBtn.focus(), 50)
+          } else if (countdownEl) {
+            countdownEl.textContent = formatDiff(diff)
+          }
+        }
+        tick()
+        countdownTimer = setInterval(tick, 1000)
+      } else {
+        // 未配置或已到时间
+        isUnlocked = true
+        setLockedUI(false)
+        document.documentElement.classList.remove('locked')
+        document.documentElement.classList.add('unlocked')
+      }
+
+      const dataArr = Object.keys(data)
       dataArr.map(customData => {
         if (data[customData] !== "") {
           if (customData === "imagePath") {
@@ -16,12 +124,14 @@ const fetchData = () => {
               .setAttribute("src", data[customData])
           } else if (customData === "fonts") {
             data[customData].forEach(font => {
-              const link = document.createElement('link')
-              link.rel = 'stylesheet'
-              link.href = font.path
-              document.head.appendChild(link)
-              //设置body字体
-              document.body.style.fontFamily = font.name
+              if (font && font.path) {
+                const link = document.createElement('link')
+                link.rel = 'stylesheet'
+                link.href = font.path
+                document.head.appendChild(link)
+              }
+              // 推迟应用字体，先收集名称，待用户点击开始并尝试加载后再切换
+              if (font && font.name) customFontNames.push(font.name)
             })
           } else if (customData === "music") {
             audioUrl = data[customData]
@@ -35,14 +145,32 @@ const fetchData = () => {
         // Check if the iteration is over
         // Run amimation if so
         if (dataArr.length === dataArr.indexOf(customData) + 1) {
-          document.querySelector("#startButton").addEventListener("click", () => {
+          document.querySelector("#startButton").addEventListener("click", async () => {
+            if (startBtn && (startBtn.getAttribute('aria-disabled') === 'true')) return
+            if (!isUnlocked) return
+            // 在开始前尝试等待自定义字体，最多等待 1500ms，超时则直接开始，避免长等待
+            await waitForFonts(customFontNames, 1500)
+            applyCustomFont()
             document.querySelector(".startSign").style.display = "none"
             animationTimeline()
-          }
-          )
+          })
           // animationTimeline()
         }
       })
+    })
+    .catch(err => {
+      // 如果配置加载失败，仍然允许开始动画，避免页面卡住
+      console.error("Failed to load customize.json:", err)
+      const startBtn = document.querySelector("#startButton")
+      if (startBtn) {
+        startBtn.addEventListener("click", async () => {
+          // 无配置时不做时间门控
+          await waitForFonts(customFontNames, 1500)
+          applyCustomFont()
+          document.querySelector(".startSign").style.display = "none"
+          animationTimeline()
+        })
+      }
     })
 }
 
@@ -54,11 +182,11 @@ const animationTimeline = () => {
 
   textBoxChars.innerHTML = `<span>${textBoxChars.innerHTML
     .split("")
-    .join("</span><span>")}</span`
+    .join("</span><span>")}</span>`
 
   hbd.innerHTML = `<span>${hbd.innerHTML
     .split("")
-    .join("</span><span>")}</span`
+    .join("</span><span>")}</span>`
 
   const ideaTextTrans = {
     opacity: 0,
@@ -327,6 +455,21 @@ const animationTimeline = () => {
 
 // Run fetch and animation in sequence
 fetchData()
+// 防拖拽兜底：阻止 .photo 内图片的拖拽/按下默认行为
+(function installPhotoGuards(){
+  const photo = document.querySelector('.photo')
+  if (!photo) return
+  photo.addEventListener('dragstart', (e) => {
+    e.preventDefault()
+  })
+  photo.addEventListener('pointerdown', (e) => {
+    const t = e.target
+    if (t && t.tagName === 'IMG') {
+      e.preventDefault()
+    }
+  })
+})()
+
 
 const playPauseButton = document.getElementById('playPauseButton')
 
@@ -342,10 +485,77 @@ playPauseButton.addEventListener('click', () => {
   }
 })
 
+// 键盘可访问性：Enter/Space 切换播放
+playPauseButton.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    if (audio) {
+      togglePlay(!isPlaying)
+    }
+  }
+})
+
 function togglePlay(play) {
   if (!audio) return
   
   isPlaying = play
   play ? audio.play() : audio.pause()
   playPauseButton.classList.toggle('playing', play)
+  playPauseButton.setAttribute('aria-pressed', String(play))
+}
+
+// 等待字体加载，尽量用页面已有文字样本触发对应 unicode-range 子集
+function waitForFonts(names = [], timeout = 1500, textSample) {
+  if (!('fonts' in document) || names.length === 0) return Promise.resolve()
+  const fallbackLatin = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?' 
+  let sample = textSample
+  if (!sample) {
+    try {
+      // 提取页面前一段可见文本，避免过长
+      const bodyText = (document.body && document.body.innerText) ? document.body.innerText : ''
+      sample = (bodyText && bodyText.trim()) ? bodyText.slice(0, 80) : '生日快乐，祝你天天开心！Happy Birthday 2025'
+    } catch (_) {
+      sample = '生日快乐，祝你天天开心！Happy Birthday 2025'
+    }
+  }
+  // 附加常见拉丁字符，保证基础子集也加载
+  const testString = (sample + ' ' + fallbackLatin).slice(0, 200)
+  const loads = names.map(n => {
+    try {
+      return document.fonts.load(`400 1em "${n}"`, testString)
+    } catch (_) {
+      return Promise.resolve()
+    }
+  })
+  const all = Promise.all(loads)
+  return new Promise(resolve => {
+    let done = false
+    const finish = () => { if (!done) { done = true; resolve() } }
+    const t = setTimeout(finish, timeout)
+    all.then(() => { clearTimeout(t); finish() }).catch(() => { clearTimeout(t); finish() })
+  })
+}
+
+function applyCustomFont() {
+  if (!customFontNames || customFontNames.length === 0) return
+  // 仅在字体已可用时切换，避免因超时未加载造成跳变
+  const isReady = (() => {
+    if (!('fonts' in document)) return true // 老浏览器，直接切换
+    try {
+      return customFontNames.some(n => document.fonts.check(`1em "${n}"`))
+    } catch (_) {
+      return false
+    }
+  })()
+  if (isReady) {
+    document.body.classList.add('font-ready')
+  } else {
+    // 再短暂重试一次，以捕获刚好加载完的时机
+    setTimeout(() => {
+      try {
+        const ok = customFontNames.some(n => document.fonts.check(`1em "${n}"`))
+        if (ok) document.body.classList.add('font-ready')
+      } catch (_) {}
+    }, 400)
+  }
 }

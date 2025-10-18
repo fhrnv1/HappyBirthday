@@ -15,7 +15,7 @@ module.exports = {
   builtins: {
     html: [{
       template: './index.html',
-      inject: true
+      inject: false
     }]
   }
 }

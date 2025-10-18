@@ -1,5 +1,7 @@
-        const canvas = document.getElementById('fireworksCanvas');
-        const ctx = canvas.getContext('2d');
+    const canvas = document.getElementById('fireworksCanvas');
+    const ctx = canvas.getContext('2d');
+    // 使用叠加混合以增强发光效果
+    ctx.globalCompositeOperation = 'lighter';
         let fireworks = [];
 
         // 设置画布尺寸
@@ -35,8 +37,12 @@
                 ctx.globalAlpha = this.alpha;
                 ctx.fillStyle = this.color;
                 ctx.beginPath();
+                // 添加轻微发光阴影
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 10;
                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.shadowBlur = 0;
                 ctx.globalAlpha = 1;
             }
         }
@@ -73,10 +79,9 @@
         }
 
         // 动画循环
-        function animate() {
-          ctx.clearRect(0, 0, canvas.width, canvas.height); // 清除画布内容
-            ctx.fillStyle = "#fff"; // 轻微残影效果
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                function animate() {
+                        // 清屏但不覆盖背景，配合 globalCompositeOperation "lighter" 增强发光
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             fireworks.forEach((firework, index) => {
                 firework.update();
