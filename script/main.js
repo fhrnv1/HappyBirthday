@@ -1,9 +1,8 @@
 // 预先初始化音频，避免用户快速点击开始时 audio 仍未创建导致无法播放
 // 默认指向项目内置音乐，后续若 customize.json 指定了其他音乐会在加载后覆盖
 let audioUrl = "./music/bgMusic.mp3"
-let audio = new Audio()
+let audio = new Audio(audioUrl)
 audio.preload = "auto"
-audio.src = audioUrl
 let isPlaying = false
 // 提前获取播放按钮引用，避免在播放 Promise 同步抛错时出现 TDZ（临时死区）错误
 const playPauseButton = document.getElementById('playPauseButton')
@@ -12,10 +11,10 @@ let customFontNames = ['Ma Shan Zheng'];
 
 // Import the data to customize and insert them into page
 // 避免潜在的全局命名冲突：用 IIFE 隔离作用域
-(function initHBApp(){
+(function initBirthdayApp(){
   fetch("customize.json")
-    .then(data => data.json())
-    .then(data => {
+    .then(res => res.json())
+    .then((data) => {
       // ===== 时间门控：到达指定时间才可开始 =====
       const startBtn = document.querySelector('#startButton')
       const countdownScreen = document.getElementById('countdownScreen')
@@ -122,7 +121,7 @@ let customFontNames = ['Ma Shan Zheng'];
         document.documentElement.classList.add('unlocked')
       }
 
-      const dataArr = Object.keys(data)
+  const dataArr = Object.keys(data)
       dataArr.map(customData => {
         if (data[customData] !== "") {
           if (customData === "imagePath") {
@@ -483,11 +482,7 @@ const animationTimeline = () => {
 })()
 
 
-document.getElementById('startButton').addEventListener('click', () => {
-  if (audio) {
-    togglePlay(true)
-  }
-})
+// Removed redundant audio play trigger here; playback is handled in the fetch handler's start button click event.
 
 playPauseButton.addEventListener('click', () => {
   if (audio) {
@@ -526,6 +521,7 @@ function togglePlay(play) {
           setUI(false)
         })
       } else {
+        // 老浏览器：audio.play() 不返回 Promise
         setUI(true)
       }
     } catch (err) {
