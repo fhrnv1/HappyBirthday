@@ -21,23 +21,14 @@ img, svg { max-width: 100%; height: auto; }
   box-sizing: inherit;
 }
 
-/* 本地字体兜底，离线可用 */
-@font-face {
-  font-family: 'WenKaiLocal';
-  src: url('../fonts/LXGWWenKai-Regular.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* 如果自定义没覆盖，默认使用本地兜底字体（不含手写字体，避免首屏跳变） */
+/* 如果自定义没覆盖，默认使用系统字体（避免本地 TTF 解码报错刷屏） */
 body { 
-  font-family: WenKaiLocal, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Segoe UI Emoji";
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Segoe UI Emoji";
 }
 
 /* 当字体准备就绪后，由 JS 添加 .font-ready 类再切换到手写字体 */
 body.font-ready {
-  font-family: 'Ma Shan Zheng', WenKaiLocal, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Segoe UI Emoji";
+  font-family: 'Ma Shan Zheng', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Segoe UI Emoji";
 }
 
 canvas {

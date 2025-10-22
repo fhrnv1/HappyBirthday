@@ -1,11 +1,18 @@
-let audioUrl = ""
-let audio = null
+// 预先初始化音频，避免用户快速点击开始时 audio 仍未创建导致无法播放
+// 默认指向项目内置音乐，后续若 customize.json 指定了其他音乐会在加载后覆盖
+let audioUrl = "./music/bgMusic.mp3"
+let audio = new Audio()
+audio.preload = "auto"
+audio.src = audioUrl
 let isPlaying = false
+// 提前获取播放按钮引用，避免在播放 Promise 同步抛错时出现 TDZ（临时死区）错误
+const playPauseButton = document.getElementById('playPauseButton')
 // 收集自定义字体名称，等待加载后再应用，减少刷新时字体跳变
-let customFontNames = ['Ma Shan Zheng']
+let customFontNames = ['Ma Shan Zheng'];
 
 // Import the data to customize and insert them into page
-const fetchData = () => {
+// 避免潜在的全局命名冲突：用 IIFE 隔离作用域
+(function initHBApp(){
   fetch("customize.json")
     .then(data => data.json())
     .then(data => {
@@ -135,8 +142,12 @@ const fetchData = () => {
             })
           } else if (customData === "music") {
             audioUrl = data[customData]
-            audio = new Audio(audioUrl)
-            audio.preload = "auto"
+            if (audio) {
+              audio.src = audioUrl
+            } else {
+              audio = new Audio(audioUrl)
+              audio.preload = "auto"
+            }
           } else {
             document.querySelector(`[data-node-name*="${customData}"]`).innerText = data[customData]
           }
@@ -148,6 +159,8 @@ const fetchData = () => {
           document.querySelector("#startButton").addEventListener("click", async () => {
             if (startBtn && (startBtn.getAttribute('aria-disabled') === 'true')) return
             if (!isUnlocked) return
+            // 确保在用户手势内尝试开始播放，避免浏览器策略拦截
+            if (audio) togglePlay(true)
             // 在开始前尝试等待自定义字体，最多等待 1500ms，超时则直接开始，避免长等待
             await waitForFonts(customFontNames, 1500)
             applyCustomFont()
@@ -172,7 +185,7 @@ const fetchData = () => {
         })
       }
     })
-}
+})();
 
 // Animation Timeline
 const animationTimeline = () => {
@@ -453,8 +466,7 @@ const animationTimeline = () => {
   })
 }
 
-// Run fetch and animation in sequence
-fetchData()
+// Run fetch and animation in sequence（已在 IIFE 中立即执行）
 // 防拖拽兜底：阻止 .photo 内图片的拖拽/按下默认行为
 (function installPhotoGuards(){
   const photo = document.querySelector('.photo')
@@ -470,8 +482,6 @@ fetchData()
   })
 })()
 
-
-const playPauseButton = document.getElementById('playPauseButton')
 
 document.getElementById('startButton').addEventListener('click', () => {
   if (audio) {
@@ -497,11 +507,35 @@ playPauseButton.addEventListener('keydown', (e) => {
 
 function togglePlay(play) {
   if (!audio) return
-  
-  isPlaying = play
-  play ? audio.play() : audio.pause()
-  playPauseButton.classList.toggle('playing', play)
-  playPauseButton.setAttribute('aria-pressed', String(play))
+
+  const setUI = (on) => {
+    isPlaying = on
+    if (playPauseButton) {
+      playPauseButton.classList.toggle('playing', on)
+      playPauseButton.setAttribute('aria-pressed', String(on))
+    }
+  }
+
+  if (play) {
+    // 某些浏览器返回 Promise，需要处理被策略阻止的情况
+    try {
+      const p = audio.play()
+      if (p && typeof p.then === 'function') {
+        p.then(() => setUI(true)).catch(err => {
+          console.warn('Audio play was blocked or failed:', err)
+          setUI(false)
+        })
+      } else {
+        setUI(true)
+      }
+    } catch (err) {
+      console.warn('Audio play threw error:', err)
+      setUI(false)
+    }
+  } else {
+    try { audio.pause() } catch (_) {}
+    setUI(false)
+  }
 }
 
 // 等待字体加载，尽量用页面已有文字样本触发对应 unicode-range 子集

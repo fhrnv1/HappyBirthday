@@ -89,7 +89,8 @@
     </div>
     <div class="six">
       <div class="photo">
-        <img src="img/jing.jpg" alt="" class="lydia-dp" data-node-name="imagePath" draggable="false">
+        <!-- 默认图片与 customize.json 一致，避免初始 404；JS 会在加载后覆盖为自定义路径 -->
+        <img src="img/sfyn.jpg" alt="照片" class="lydia-dp" data-node-name="imagePath" draggable="false">
         <img src="img/hat.svg" alt="" class="hat" draggable="false">
         <div class="mask" aria-hidden="true"></div>
       </div>
@@ -177,8 +178,8 @@
 <link rel="preload" as="image" href="img/ballon2.svg" />
 <link rel="preload" as="image" href="img/ballon3.svg" />
 <link rel="preload" as="image" href="img/hat.svg" />
-<link rel="preload" as="image" href="img/lydia2.png" />
-<link rel="preload" as="audio" href="music/bgMusic.mp3" />
+<link rel="preload" as="image" href="img/sfyn.jpg" />
+<!-- 移除 audio 预加载，音频由 JS preload，且部分浏览器/环境会对此发出告警 -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/1.20.3/TweenMax.min.js"></script>
 <script type="application/javascript" src="script/main.js"></script>
