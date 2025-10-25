@@ -3,6 +3,8 @@
 let audioUrl = "./music/bgMusic.mp3"
 let audio = new Audio(audioUrl)
 audio.preload = "auto"
+// 默认循环播放 BGM，可在 customize.json 中通过 musicLoop 覆盖
+audio.loop = true
 let isPlaying = false
 // 提前获取播放按钮引用，避免在播放 Promise 同步抛错时出现 TDZ（临时死区）错误
 const playPauseButton = document.getElementById('playPauseButton')
@@ -146,7 +148,11 @@ let customFontNames = ['Ma Shan Zheng'];
             } else {
               audio = new Audio(audioUrl)
               audio.preload = "auto"
+              audio.loop = true
             }
+          } else if (customData === "musicLoop") {
+            // 允许在 customize.json 中用 true/false 控制是否循环
+            try { audio.loop = Boolean(data[customData]) } catch (_) {}
           } else {
             document.querySelector(`[data-node-name*="${customData}"]`).innerText = data[customData]
           }
