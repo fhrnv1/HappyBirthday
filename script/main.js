@@ -5,11 +5,35 @@ let audio = new Audio(audioUrl)
 audio.preload = "auto"
 // 默认循环播放 BGM，可在 customize.json 中通过 musicLoop 覆盖
 audio.loop = true
+// iOS/Safari 内联播放，避免进入全屏播放器
+audio.playsInline = true
 let isPlaying = false
 // 提前获取播放按钮引用，避免在播放 Promise 同步抛错时出现 TDZ（临时死区）错误
 const playPauseButton = document.getElementById('playPauseButton')
 // 收集自定义字体名称，等待加载后再应用，减少刷新时字体跳变
 let customFontNames = ['Ma Shan Zheng'];
+// 音频预取：优先下载为 Blob，点击开始时可本地流式播放，减少等待与卡顿
+let prefetchedAudioUrl = null
+let prefetchPromise = null
+
+async function prefetchAudio(url) {
+  try {
+    if (!url) return null
+    // 如果是同源资源，直接抓取 Blob；跨域失败则回退到原链接
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) throw new Error(`prefetch failed ${res.status}`)
+    const blob = await res.blob()
+    // 释放旧 blob URL，避免内存泄漏
+    if (prefetchedAudioUrl) {
+      try { URL.revokeObjectURL(prefetchedAudioUrl) } catch (_) {}
+    }
+    prefetchedAudioUrl = URL.createObjectURL(blob)
+    return prefetchedAudioUrl
+  } catch (e) {
+    console.warn('Prefetch audio failed, fallback to direct src:', e)
+    return null
+  }
+}
 
 // Import the data to customize and insert them into page
 // 避免潜在的全局命名冲突：用 IIFE 隔离作用域
@@ -149,7 +173,10 @@ let customFontNames = ['Ma Shan Zheng'];
               audio = new Audio(audioUrl)
               audio.preload = "auto"
               audio.loop = true
+              audio.playsInline = true
             }
+            // 异步预取音频，转为 Blob URL，提升首播稳定性
+            prefetchPromise = prefetchAudio(audioUrl)
           } else if (customData === "musicLoop") {
             // 允许在 customize.json 中用 true/false 控制是否循环
             try { audio.loop = Boolean(data[customData]) } catch (_) {}
@@ -164,8 +191,31 @@ let customFontNames = ['Ma Shan Zheng'];
           document.querySelector("#startButton").addEventListener("click", async () => {
             if (startBtn && (startBtn.getAttribute('aria-disabled') === 'true')) return
             if (!isUnlocked) return
+            // 若已预取完成，优先切换为 blob URL，减少首播等待
+            try {
+              if (prefetchPromise) {
+                const readyUrl = await Promise.race([
+                  prefetchPromise,
+                  new Promise(resolve => setTimeout(() => resolve(null), 700))
+                ])
+                if (readyUrl) {
+                  audio.src = readyUrl
+                }
+              }
+            } catch (_) {}
+
             // 确保在用户手势内尝试开始播放，避免浏览器策略拦截
             if (audio) togglePlay(true)
+
+            // 等待进入 playing 状态后再启动重量级动画，降低启动期卡顿对音频的影响
+            await new Promise(resolve => {
+              if (!audio) return resolve()
+              if (!audio.paused) return resolve()
+              const onPlaying = () => { audio.removeEventListener('playing', onPlaying); resolve() }
+              // 最多等待 1 秒，超时仍继续
+              const t = setTimeout(() => { audio && audio.removeEventListener('playing', onPlaying); resolve() }, 1000)
+              audio.addEventListener('playing', () => { clearTimeout(t); onPlaying() })
+            })
             // 在开始前尝试等待自定义字体，最多等待 1500ms，超时则直接开始，避免长等待
             await waitForFonts(customFontNames, 1500)
             applyCustomFont()
@@ -183,6 +233,15 @@ let customFontNames = ['Ma Shan Zheng'];
       if (startBtn) {
         startBtn.addEventListener("click", async () => {
           // 无配置时不做时间门控
+          if (audio) togglePlay(true)
+          // 等待进入 playing 状态后再启动重量级动画
+          await new Promise(resolve => {
+            if (!audio) return resolve()
+            if (!audio.paused) return resolve()
+            const onPlaying = () => { audio.removeEventListener('playing', onPlaying); resolve() }
+            const t = setTimeout(() => { audio && audio.removeEventListener('playing', onPlaying); resolve() }, 1000)
+            audio.addEventListener('playing', () => { clearTimeout(t); onPlaying() })
+          })
           await waitForFonts(customFontNames, 1500)
           applyCustomFont()
           document.querySelector(".startSign").style.display = "none"
@@ -520,6 +579,9 @@ function togglePlay(play) {
   if (play) {
     // 某些浏览器返回 Promise，需要处理被策略阻止的情况
     try {
+      // 确保速率/静音等状态正确
+      audio.muted = false
+      audio.playbackRate = 1.0
       const p = audio.play()
       if (p && typeof p.then === 'function') {
         p.then(() => setUI(true)).catch(err => {

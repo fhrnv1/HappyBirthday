@@ -133,6 +133,10 @@ html.unlocked #countdownScreen { display: none; }
   overflow: hidden; /* 避免内部绝对定位元素撑出视口 */
 }
 
+/* 明确分层，避免移动端合成抖动：eight 在画布之上、照片层之下 */
+.container div.eight { z-index: 6; contain: paint; }
+.container div.seven { z-index: 7; }
+
 .container > div {
   position: absolute;
   left: 0;
@@ -296,8 +300,17 @@ html.unlocked #countdownScreen { display: none; }
   position: absolute;
   top: 0;
   left: 0;
-  visibility: hidden;
-  z-index: -1;
+  /* 避免切换 visibility 引发布局抖动：保持可见但初始透明 */
+  visibility: visible;
+  opacity: 0;
+  pointer-events: none;
+  /* 提示浏览器单独合成层，减少放大时的重绘闪烁 */
+  will-change: transform, opacity;
+  transform-origin: 50% 50%;
+  transform-box: fill-box;
+  transform: translate3d(0,0,0);
+  -webkit-transform: translate3d(0,0,0);
+  backface-visibility: hidden;
 }
 
 .eight svg:nth-child(1) {
