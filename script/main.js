@@ -1,6 +1,8 @@
 // 预先初始化音频，避免用户快速点击开始时 audio 仍未创建导致无法播放
 // 默认指向项目内置音乐，后续若 customize.json 指定了其他音乐会在加载后覆盖
-let audioUrl = "./music/bgMusic.mp3"
+const DEFAULT_IMAGE = "img/sfyn.jpg"
+const DEFAULT_MUSIC = "./music/bgMusic.mp3"
+let audioUrl = DEFAULT_MUSIC
 let audio = new Audio(audioUrl)
 audio.preload = "auto"
 // 默认循环播放 BGM，可在 customize.json 中通过 musicLoop 覆盖
@@ -15,12 +17,13 @@ let customFontNames = ['Ma Shan Zheng'];
 // 音频预取：优先下载为 Blob，点击开始时可本地流式播放，减少等待与卡顿
 let prefetchedAudioUrl = null
 let prefetchPromise = null
+let triedAudioFallback = false
 
 async function prefetchAudio(url) {
   try {
     if (!url) return null
-    // 如果是同源资源，直接抓取 Blob；跨域失败则回退到原链接
-    const res = await fetch(url, { cache: 'no-store' })
+    // 直接抓取 Blob；若跨域不允许或失败，将回退到原链接
+    const res = await fetch(url, { cache: 'default' })
     if (!res.ok) throw new Error(`prefetch failed ${res.status}`)
     const blob = await res.blob()
     // 释放旧 blob URL，避免内存泄漏
@@ -33,6 +36,31 @@ async function prefetchAudio(url) {
     console.warn('Prefetch audio failed, fallback to direct src:', e)
     return null
   }
+}
+
+function setImageWithFallback(imgEl, src) {
+  if (!imgEl) return
+  imgEl.onerror = () => {
+    if (imgEl.getAttribute('src') !== DEFAULT_IMAGE) {
+      imgEl.setAttribute('src', DEFAULT_IMAGE)
+    }
+  }
+  imgEl.setAttribute('src', src || DEFAULT_IMAGE)
+}
+
+function setAudioSource(url) {
+  try {
+    if (!audio) return
+    audio.src = url || audioUrl || DEFAULT_MUSIC
+    audio.load()
+  } catch (_) {}
+}
+
+function tryAudioFallbackOnce() {
+  if (triedAudioFallback) return
+  triedAudioFallback = true
+  console.warn('Switching to fallback BGM...')
+  setAudioSource(DEFAULT_MUSIC)
 }
 
 // Import the data to customize and insert them into page
@@ -151,9 +179,8 @@ async function prefetchAudio(url) {
       dataArr.map(customData => {
         if (data[customData] !== "") {
           if (customData === "imagePath") {
-            document
-              .querySelector(`[data-node-name*="${customData}"]`)
-              .setAttribute("src", data[customData])
+            const imgEl = document.querySelector(`[data-node-name*="${customData}"]`)
+            setImageWithFallback(imgEl, data[customData])
           } else if (customData === "fonts") {
             data[customData].forEach(font => {
               if (font && font.path) {
@@ -196,13 +223,18 @@ async function prefetchAudio(url) {
               if (prefetchPromise) {
                 const readyUrl = await Promise.race([
                   prefetchPromise,
-                  new Promise(resolve => setTimeout(() => resolve(null), 700))
+                  new Promise(resolve => setTimeout(() => resolve(null), 800))
                 ])
                 if (readyUrl) {
-                  audio.src = readyUrl
+                  setAudioSource(readyUrl)
+                } else {
+                  // 预取未就绪，确保使用原地址触发网络
+                  setAudioSource(audioUrl)
                 }
+              } else {
+                setAudioSource(audioUrl)
               }
-            } catch (_) {}
+            } catch (_) { setAudioSource(audioUrl) }
 
             // 确保在用户手势内尝试开始播放，避免浏览器策略拦截
             if (audio) togglePlay(true)
@@ -549,6 +581,12 @@ const animationTimeline = () => {
 
 // Removed redundant audio play trigger here; playback is handled in the fetch handler's start button click event.
 
+// 音频故障监控：若网络中断或资源不可用，尝试一次回退
+audio.addEventListener('error', tryAudioFallbackOnce, { once: true })
+audio.addEventListener('stalled', () => { setTimeout(tryAudioFallbackOnce, 300) }, { once: true })
+audio.addEventListener('suspend', () => { /* 部分浏览器正常行为，忽略 */ })
+audio.addEventListener('emptied', tryAudioFallbackOnce, { once: true })
+
 playPauseButton.addEventListener('click', () => {
   if (audio) {
     togglePlay(!isPlaying)
@@ -586,7 +624,18 @@ function togglePlay(play) {
       if (p && typeof p.then === 'function') {
         p.then(() => setUI(true)).catch(err => {
           console.warn('Audio play was blocked or failed:', err)
-          setUI(false)
+          // 如果是资源问题，切到默认 BGM 再尝试一次
+          tryAudioFallbackOnce()
+          setTimeout(() => {
+            try {
+              const p2 = audio.play()
+              if (p2 && typeof p2.then === 'function') {
+                p2.then(() => setUI(true)).catch(() => setUI(false))
+              } else {
+                setUI(true)
+              }
+            } catch (_) { setUI(false) }
+          }, 50)
         })
       } else {
         // 老浏览器：audio.play() 不返回 Promise
@@ -594,6 +643,7 @@ function togglePlay(play) {
       }
     } catch (err) {
       console.warn('Audio play threw error:', err)
+      tryAudioFallbackOnce()
       setUI(false)
     }
   } else {
